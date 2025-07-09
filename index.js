@@ -423,6 +423,53 @@ app.get("/coupons", async (req, res) => {
       }
     });
 
+    app.put("/coupons/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { code, discount, description } = req.body;
+
+    if (!code || !discount) {
+      return res.status(400).json({ message: "Code and discount are required" });
+    }
+
+    const updated = await couponsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          code: code.trim(),
+          discount: Number(discount),
+          description: description?.trim() || "",
+        },
+      }
+    );
+
+    if (updated.matchedCount === 0) {
+      return res.status(404).json({ message: "Coupon not found" });
+    }
+
+    res.json({ message: "Coupon updated successfully" });
+  } catch (error) {
+    console.error("Error updating coupon:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+app.delete("/coupons/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await couponsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Coupon not found" });
+    }
+
+    res.json({ message: "Coupon deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting coupon:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 // admin 
 
