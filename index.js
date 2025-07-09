@@ -331,7 +331,50 @@ app.post("/create-payment-intent", async (req, res) => {
 });
 
 // payment history 
+app.post("/payments", async (req, res) => {
+  try {
+    const { userEmail, amount, month, paymentIntentId, apartmentNo, blockName, floorNo } = req.body;
 
+    if (!userEmail || !amount || !month || !paymentIntentId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const paymentRecord = {
+      userEmail,
+      amount,
+      month,
+      paymentIntentId,
+      apartmentNo,
+      blockName,
+      floorNo,
+      createdAt: new Date(),
+    };
+
+    const result = await paymentsCollection.insertOne(paymentRecord);
+
+    res.status(201).json({ message: "Payment recorded", id: result.insertedId });
+  } catch (error) {
+    console.error("Error saving payment:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.get("/payments", async (req, res) => {
+  try {
+    const email = req.query.email;
+
+    let filter = {};
+    if (email) {
+      filter.userEmail = email;
+    }
+
+    const payments = await paymentsCollection.find(filter).sort({ createdAt: -1 }).toArray();
+    res.status(200).json(payments);
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 
     await client.db("admin").command({ ping: 1 });
