@@ -3,7 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const Stripe = require("stripe");
-const stripe = Stripe(process.env.PAYMENT_GATEWAY_KEY); // Add this line at the top of your file
+const stripe = Stripe(process.env.PAYMENT_GATEWAY_KEY);
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -20,25 +20,53 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+// jwt
+const admin = require("firebase-admin");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
+const serviceAccount = JSON.parse(decoded);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+// jwt
+// write a function for validation token
+const verifyfirebaseToken = async (req, res, next) => {
+  const authHeader = req.headers?.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    console.log("dicoded", decoded);
+    req.decoded = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+};
+// jwt close
+
 async function run() {
   try {
     await client.connect();
 
     const db = client.db("ThikanaDB");
     const apartmentsCollection = db.collection("apartments");
-   const agreementsCollection = db.collection("agreements");
+    const agreementsCollection = db.collection("agreements");
 
-const usersCollection = client.db("ThikanaDB").collection("users");
+    const usersCollection = client.db("ThikanaDB").collection("users");
 
-const announcementsCollection = db.collection("announcements");
+    const announcementsCollection = db.collection("announcements");
 
-const paymentsCollection = db.collection("payments");
- const couponsCollection = db.collection("coupons");
+    const paymentsCollection = db.collection("payments");
+    const couponsCollection = db.collection("coupons");
 
-
-
-
-      // apartment api
+    // apartment api
     app.get("/apartments", async (req, res) => {
       try {
         const page = parseInt(req.query.page) || 1;
@@ -139,264 +167,278 @@ const paymentsCollection = db.collection("payments");
       }
     });
 
-// apartment api
+    // apartment api
 
-app.put("/agreements/accept/:email", async (req, res) => {
-  const email = req.params.email;
+    app.put("/agreements/accept/:email", async (req, res) => {
+      const email = req.params.email;
 
-  try {
-    // Step 1: Update agreement's status and userRoll in agreement collection
-    const agreementResult = await agreementsCollection.updateOne(
-      { userEmail: email, status: "pending" },
-      { $set: { status: "checked", userRoll: "member" } }
-    );
+      try {
+        // Step 1: Update agreement's status and userRoll in agreement collection
+        const agreementResult = await agreementsCollection.updateOne(
+          { userEmail: email, status: "pending" },
+          { $set: { status: "checked", userRoll: "member" } }
+        );
 
-    // Step 2: Update userRoll in users collection
-    
-    const userResult = await usersCollection.updateOne(
-      { email },
-      { $set: { userRoll: "member" } }
-    );
+        // Step 2: Update userRoll in users collection
 
-    res.status(200).json({
-      message: "Agreement accepted and userRoll updated to member",
-      agreementModified: agreementResult.modifiedCount,
-      userModified: userResult.modifiedCount,
+        const userResult = await usersCollection.updateOne(
+          { email },
+          { $set: { userRoll: "member" } }
+        );
+
+        res.status(200).json({
+          message: "Agreement accepted and userRoll updated to member",
+          agreementModified: agreementResult.modifiedCount,
+          userModified: userResult.modifiedCount,
+        });
+      } catch (error) {
+        console.error("Error during agreement acceptance:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+      }
     });
-  } catch (error) {
-    console.error("Error during agreement acceptance:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
 
-// 
+    //
 
+    app.put("/agreements/reject/:email", async (req, res) => {
+      const email = req.params.email;
 
+      const result = await agreementsCollection.updateOne(
+        { userEmail: email, status: "pending" },
+        { $set: { status: "checked" } }
+      );
 
-app.put("/agreements/reject/:email", async (req, res) => {
-  const email = req.params.email;
+      res.json({ modifiedCount: result.modifiedCount });
+    });
 
-  const result = await agreementsCollection.updateOne(
-    { userEmail: email, status: "pending" },
-    { $set: { status: "checked" } }
-  );
+    // announcement api
 
-  res.json({ modifiedCount: result.modifiedCount });
-});
+    app.post("/announcements", async (req, res) => {
+      try {
+        const { title, description } = req.body;
 
+        if (!title || !description) {
+          return res
+            .status(400)
+            .json({ message: "Title and description required" });
+        }
 
+        const newAnnouncement = {
+          title,
+          description,
+          createdAt: new Date(),
+        };
 
-// announcement api 
+        await announcementsCollection.insertOne(newAnnouncement);
 
-app.post("/announcements", async (req, res) => {
-  try {
-    const { title, description } = req.body;
+        res.status(201).json({ message: "Announcement created successfully" });
+      } catch (error) {
+        console.error("Error creating announcement:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
-    if (!title || !description) {
-      return res.status(400).json({ message: "Title and description required" });
-    }
+    app.get("/announcements", async (req, res) => {
+      try {
+        const announcements = await announcementsCollection
+          .find({})
+          .sort({ createdAt: -1 }) 
+          .toArray();
 
-    const newAnnouncement = {
-      title,
-      description,
-      createdAt: new Date(),
-    };
+        res.status(200).json(announcements);
+      } catch (error) {
+        console.error("Error fetching announcements:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+    // announcement api
 
-    await announcementsCollection.insertOne(newAnnouncement);
+    // manage member api
+    app.put("/agreements/remove-member/:email", async (req, res) => {
+      const email = req.params.email;
 
-    res.status(201).json({ message: "Announcement created successfully" });
-  } catch (error) {
-    console.error("Error creating announcement:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+      try {
+        const result = await agreementsCollection.updateOne(
+          { userEmail: email, userRoll: "member" },
+          { $set: { userRoll: "user" } }
+        );
 
+        if (result.modifiedCount === 0) {
+          return res
+            .status(404)
+            .json({ message: "Member not found or already removed." });
+        }
 
+        res
+          .status(200)
+          .json({ message: "Member role reverted to user successfully." });
+      } catch (error) {
+        console.error("Error removing member:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
-app.get("/announcements", async (req, res) => {
-  try {
-    const announcements = await announcementsCollection
-      .find({})
-      .sort({ createdAt: -1 }) // সর্বশেষ ঘোষণাগুলো আগে আসবে
-      .toArray();
+    // role api
 
-    res.status(200).json(announcements);
-  } catch (error) {
-    console.error("Error fetching announcements:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-// announcement api 
+    app.get("/users/:email/role", async (req, res) => {
+      try {
+        const email = req.params.email;
 
-// manage member api 
-app.put("/agreements/remove-member/:email", async (req, res) => {
-  const email = req.params.email;
+        if (!email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
 
-  try {
-    const result = await agreementsCollection.updateOne(
-      { userEmail: email, userRoll: "member" },
-      { $set: { userRoll: "user" } }
-    );
+        // agreementsCollection 
+        const agreement = await agreementsCollection.findOne({
+          userEmail: email,
+        });
 
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ message: "Member not found or already removed." });
-    }
+        if (!agreement) {
+          return res.status(200).send({ role: "user" }); 
+        }
 
-    res.status(200).json({ message: "Member role reverted to user successfully." });
-  } catch (error) {
-    console.error("Error removing member:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+        res.send({ role: agreement.userRoll || "user" });
+      } catch (error) {
+        console.error("Error getting user role:", error);
+        res.status(500).send({ message: "Failed to get role" });
+      }
+    });
 
-// role api 
+    // payment api
+    app.post("/create-payment", async (req, res) => {
+      const { userEmail, amount, month, apartmentDetails } = req.body;
 
-app.get("/users/:email/role", async (req, res) => {
-  try {
-    const email = req.params.email;
-
-    if (!email) {
-      return res.status(400).send({ message: "Email is required" });
-    }
-
-    // agreementsCollection থেকে রোল খুঁজে বের করো
-    const agreement = await agreementsCollection.findOne({ userEmail: email });
-
-    if (!agreement) {
-      return res.status(200).send({ role: "user" }); // যদি না থাকে, তাহলে user ধরা হবে
-    }
-
-    res.send({ role: agreement.userRoll || "user" });
-  } catch (error) {
-    console.error("Error getting user role:", error);
-    res.status(500).send({ message: "Failed to get role" });
-  }
-})
-
-// payment api 
-app.post("/create-payment", async (req, res) => {
-  const { userEmail, amount, month, apartmentDetails } = req.body;
-
-  try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "bdt",
-            product_data: {
-              name: `Rent for ${apartmentDetails.apartmentNo} (${month})`,
-              description: `Block: ${apartmentDetails.blockName}, Floor: ${apartmentDetails.floorNo}`,
+      try {
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
+          line_items: [
+            {
+              price_data: {
+                currency: "bdt",
+                product_data: {
+                  name: `Rent for ${apartmentDetails.apartmentNo} (${month})`,
+                  description: `Block: ${apartmentDetails.blockName}, Floor: ${apartmentDetails.floorNo}`,
+                },
+                unit_amount: amount * 100, // Stripe expects amount in paisa
+              },
+              quantity: 1,
             },
-            unit_amount: amount * 100, // Stripe expects amount in paisa
+          ],
+          mode: "payment",
+          success_url: `http://localhost:5173/payment-success?email=${userEmail}`,
+          cancel_url: `http://localhost:5173/payment-cancelled`,
+          metadata: {
+            email: userEmail,
+            month,
+            apartment: apartmentDetails.apartmentNo,
           },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `http://localhost:5173/payment-success?email=${userEmail}`,
-      cancel_url: `http://localhost:5173/payment-cancelled`,
-      metadata: {
-        email: userEmail,
-        month,
-        apartment: apartmentDetails.apartmentNo,
-      },
+        });
+
+        res.send({ id: session.id });
+      } catch (err) {
+        console.error("Stripe error:", err);
+        res.status(500).send({ error: "Payment failed" });
+      }
     });
 
-    res.send({ id: session.id });
-  } catch (err) {
-    console.error("Stripe error:", err);
-    res.status(500).send({ error: "Payment failed" });
-  }
-});
+    app.post("/create-payment-intent", async (req, res) => {
+      const { amount, email } = req.body;
 
-app.post("/create-payment-intent", async (req, res) => {
-  const { amount, email } = req.body;
+      try {
+       
 
-  try {
-    // Optional: Look for an existing payment intent for this email and amount
-    // You may store and reuse it using your DB if needed
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount * 100, 
+          currency: "bdt",
+          metadata: { email },
+        });
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount * 100, // Stripe expects smallest unit (paisa)
-      currency: "bdt",
-      metadata: { email },
+        res.send({ clientSecret: paymentIntent.client_secret });
+      } catch (error) {
+        console.error("Payment Intent Error:", error);
+        res.status(500).send({ error: "Failed to create payment intent" });
+      }
     });
 
-    res.send({ clientSecret: paymentIntent.client_secret });
-  } catch (error) {
-    console.error("Payment Intent Error:", error);
-    res.status(500).send({ error: "Failed to create payment intent" });
-  }
-});
+    // payment history
+    app.post("/payments", async (req, res) => {
+      try {
+        const {
+          userEmail,
+          amount,
+          month,
+          paymentIntentId,
+          apartmentNo,
+          blockName,
+          floorNo,
+        } = req.body;
 
-// payment history 
-app.post("/payments", async (req, res) => {
-  try {
-    const { userEmail, amount, month, paymentIntentId, apartmentNo, blockName, floorNo } = req.body;
+        if (!userEmail || !amount || !month || !paymentIntentId) {
+          return res.status(400).json({ message: "Missing required fields" });
+        }
 
-    if (!userEmail || !amount || !month || !paymentIntentId) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
+        const paymentRecord = {
+          userEmail,
+          amount,
+          month,
+          paymentIntentId,
+          apartmentNo,
+          blockName,
+          floorNo,
+          createdAt: new Date(),
+        };
 
-    const paymentRecord = {
-      userEmail,
-      amount,
-      month,
-      paymentIntentId,
-      apartmentNo,
-      blockName,
-      floorNo,
-      createdAt: new Date(),
-    };
+        const result = await paymentsCollection.insertOne(paymentRecord);
 
-    const result = await paymentsCollection.insertOne(paymentRecord);
+        res
+          .status(201)
+          .json({ message: "Payment recorded", id: result.insertedId });
+      } catch (error) {
+        console.error("Error saving payment:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
-    res.status(201).json({ message: "Payment recorded", id: result.insertedId });
-  } catch (error) {
-    console.error("Error saving payment:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+    app.get("/payments", async (req, res) => {
+      try {
+        const email = req.query.email;
 
-app.get("/payments", async (req, res) => {
-  try {
-    const email = req.query.email;
+        let filter = {};
+        if (email) {
+          filter.userEmail = email;
+        }
 
-    let filter = {};
-    if (email) {
-      filter.userEmail = email;
-    }
+        const payments = await paymentsCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.status(200).json(payments);
+      } catch (error) {
+        console.error("Error fetching payments:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
-    const payments = await paymentsCollection.find(filter).sort({ createdAt: -1 }).toArray();
-    res.status(200).json(payments);
-  } catch (error) {
-    console.error("Error fetching payments:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+    // coupon
 
-// coupon 
+    app.get("/coupons", async (req, res) => {
+      try {
+        const { code } = req.query; 
+        let filter = {};
 
-app.get("/coupons", async (req, res) => {
-  try {
-    const { code } = req.query; // get coupon code from query string
-    let filter = {};
+        if (code) {
+          filter.code = code.trim();
+        }
 
-    if (code) {
-      filter.code = code.trim();
-    }
-
-    const coupons = await couponsCollection.find(filter).sort({ createdAt: -1 }).toArray();
-    res.status(200).json(coupons);
-  } catch (error) {
-    console.error("Error fetching coupons:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-
-    
+        const coupons = await couponsCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.status(200).json(coupons);
+      } catch (error) {
+        console.error("Error fetching coupons:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
     // Add new coupon
     app.post("/coupons", async (req, res) => {
@@ -404,7 +446,9 @@ app.get("/coupons", async (req, res) => {
         const { code, discount, description } = req.body;
 
         if (!code || !discount) {
-          return res.status(400).json({ message: "Coupon code and discount are required" });
+          return res
+            .status(400)
+            .json({ message: "Coupon code and discount are required" });
         }
 
         const newCoupon = {
@@ -416,7 +460,9 @@ app.get("/coupons", async (req, res) => {
 
         const result = await couponsCollection.insertOne(newCoupon);
 
-        res.status(201).json({ message: "Coupon added", couponId: result.insertedId });
+        res
+          .status(201)
+          .json({ message: "Coupon added", couponId: result.insertedId });
       } catch (error) {
         console.error("Error adding coupon:", error);
         res.status(500).json({ message: "Server error" });
@@ -424,101 +470,107 @@ app.get("/coupons", async (req, res) => {
     });
 
     app.put("/coupons/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { code, discount, description } = req.body;
+      try {
+        const { id } = req.params;
+        const { code, discount, description } = req.body;
 
-    if (!code || !discount) {
-      return res.status(400).json({ message: "Code and discount are required" });
-    }
+        if (!code || !discount) {
+          return res
+            .status(400)
+            .json({ message: "Code and discount are required" });
+        }
 
-    const updated = await couponsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      {
-        $set: {
-          code: code.trim(),
-          discount: Number(discount),
-          description: description?.trim() || "",
-        },
+        const updated = await couponsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              code: code.trim(),
+              discount: Number(discount),
+              description: description?.trim() || "",
+            },
+          }
+        );
+
+        if (updated.matchedCount === 0) {
+          return res.status(404).json({ message: "Coupon not found" });
+        }
+
+        res.json({ message: "Coupon updated successfully" });
+      } catch (error) {
+        console.error("Error updating coupon:", error);
+        res.status(500).json({ message: "Server error" });
       }
-    );
-
-    if (updated.matchedCount === 0) {
-      return res.status(404).json({ message: "Coupon not found" });
-    }
-
-    res.json({ message: "Coupon updated successfully" });
-  } catch (error) {
-    console.error("Error updating coupon:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-app.delete("/coupons/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await couponsCollection.deleteOne({ _id: new ObjectId(id) });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ message: "Coupon not found" });
-    }
-
-    res.json({ message: "Coupon deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting coupon:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-
-// admin 
-
-app.get("/admin/profile", async (req, res) => {
-  try {
-    const agreements = await agreementsCollection.find().toArray();
-
-    const admin = agreements.find((a) => a.userRoll === "admin");
-
-    if (!admin) {
-      return res.status(404).json({ message: "Admin not found" });
-    }
-
-    const totalRooms = await apartmentsCollection.countDocuments();
-
-    const unavailableRoomsCount = agreements.length;
-    const availableRoomsCount = totalRooms - unavailableRoomsCount;
-
-    const availableRoomsPercent = totalRooms
-      ? ((availableRoomsCount / totalRooms) * 100).toFixed(1)
-      : "0";
-
-    const unavailableRoomsPercent = totalRooms
-      ? ((unavailableRoomsCount / totalRooms) * 100).toFixed(1)
-      : "0";
-
-    const totalUsers = agreements.filter((a) => a.userRoll === "user").length;
-    const totalMembers = agreements.filter((a) => a.userRoll === "member").length;
-
-    res.status(200).json({
-      admin: {
-        name: admin.userName,
-        email: admin.userEmail,
-        image: admin.userImage,
-      },
-      stats: {
-        totalRooms,
-        availableRoomsPercent,
-        unavailableRoomsPercent,
-        totalUsers,
-        totalMembers,
-      },
     });
-  } catch (error) {
-    console.error("Error fetching admin profile:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+    app.delete("/coupons/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
 
+        const result = await couponsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Coupon not found" });
+        }
+
+        res.json({ message: "Coupon deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting coupon:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    // admin
+
+    app.get("/admin/profile", async (req, res) => {
+      try {
+        const agreements = await agreementsCollection.find().toArray();
+
+        const admin = agreements.find((a) => a.userRoll === "admin");
+
+        if (!admin) {
+          return res.status(404).json({ message: "Admin not found" });
+        }
+
+        const totalRooms = await apartmentsCollection.countDocuments();
+
+        const unavailableRoomsCount = agreements.length;
+        const availableRoomsCount = totalRooms - unavailableRoomsCount;
+
+        const availableRoomsPercent = totalRooms
+          ? ((availableRoomsCount / totalRooms) * 100).toFixed(1)
+          : "0";
+
+        const unavailableRoomsPercent = totalRooms
+          ? ((unavailableRoomsCount / totalRooms) * 100).toFixed(1)
+          : "0";
+
+        const totalUsers = agreements.filter(
+          (a) => a.userRoll === "user"
+        ).length;
+        const totalMembers = agreements.filter(
+          (a) => a.userRoll === "member"
+        ).length;
+
+        res.status(200).json({
+          admin: {
+            name: admin.userName,
+            email: admin.userEmail,
+            image: admin.userImage,
+          },
+          stats: {
+            totalRooms,
+            availableRoomsPercent,
+            unavailableRoomsPercent,
+            totalUsers,
+            totalMembers,
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching admin profile:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
