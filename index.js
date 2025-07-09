@@ -95,7 +95,7 @@ async function run() {
       }
     });
 
-    app.get("/agreements/:email", async (req, res) => {
+    app.get("/agreements/:email",verifyfirebaseToken, async (req, res) => {
       const email = req.params.email;
       try {
         const agreement = await agreementsCollection.findOne({
@@ -155,7 +155,7 @@ async function run() {
       }
     });
 
-    app.get("/agreements", async (req, res) => {
+    app.get("/agreements",verifyfirebaseToken, async (req, res) => {
       try {
         // Find all agreements (you can filter by status if needed)
         const agreements = await agreementsCollection.find({}).toArray();
@@ -279,7 +279,7 @@ async function run() {
 
     // role api
 
-    app.get("/users/:email/role", async (req, res) => {
+    app.get("/users/:email/role",verifyfirebaseToken, async (req, res) => {
       try {
         const email = req.params.email;
 
@@ -398,7 +398,7 @@ async function run() {
       }
     });
 
-    app.get("/payments", async (req, res) => {
+    app.get("/payments",verifyfirebaseToken, async (req, res) => {
       try {
         const email = req.query.email;
 
