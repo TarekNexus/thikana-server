@@ -33,7 +33,7 @@ const usersCollection = client.db("ThikanaDB").collection("users");
 const announcementsCollection = db.collection("announcements");
 
 const paymentsCollection = db.collection("payments");
-
+ const couponsCollection = db.collection("coupons");
 
 
 
@@ -375,6 +375,56 @@ app.get("/payments", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// coupon 
+
+app.get("/coupons", async (req, res) => {
+  try {
+    const { code } = req.query; // get coupon code from query string
+    let filter = {};
+
+    if (code) {
+      filter.code = code.trim();
+    }
+
+    const coupons = await couponsCollection.find(filter).sort({ createdAt: -1 }).toArray();
+    res.status(200).json(coupons);
+  } catch (error) {
+    console.error("Error fetching coupons:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+    
+
+    // Add new coupon
+    app.post("/coupons", async (req, res) => {
+      try {
+        const { code, discount, description } = req.body;
+
+        if (!code || !discount) {
+          return res.status(400).json({ message: "Coupon code and discount are required" });
+        }
+
+        const newCoupon = {
+          code: code.trim(),
+          discount: Number(discount),
+          description: description?.trim() || "",
+          createdAt: new Date(),
+        };
+
+        const result = await couponsCollection.insertOne(newCoupon);
+
+        res.status(201).json({ message: "Coupon added", couponId: result.insertedId });
+      } catch (error) {
+        console.error("Error adding coupon:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+
+
 
 
     await client.db("admin").command({ ping: 1 });
