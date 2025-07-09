@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const Stripe = require("stripe");
+const stripe = Stripe(process.env.PAYMENT_GATEWAY_KEY); // Add this line at the top of your file
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -30,7 +32,7 @@ const usersCollection = client.db("ThikanaDB").collection("users");
 
 const announcementsCollection = db.collection("announcements");
 
-
+const paymentsCollection = db.collection("payments");
 
 
 
@@ -271,9 +273,64 @@ app.get("/users/:email/role", async (req, res) => {
   }
 })
 
+// payment api 
+app.post("/create-payment", async (req, res) => {
+  const { userEmail, amount, month, apartmentDetails } = req.body;
 
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "bdt",
+            product_data: {
+              name: `Rent for ${apartmentDetails.apartmentNo} (${month})`,
+              description: `Block: ${apartmentDetails.blockName}, Floor: ${apartmentDetails.floorNo}`,
+            },
+            unit_amount: amount * 100, // Stripe expects amount in paisa
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `http://localhost:5173/payment-success?email=${userEmail}`,
+      cancel_url: `http://localhost:5173/payment-cancelled`,
+      metadata: {
+        email: userEmail,
+        month,
+        apartment: apartmentDetails.apartmentNo,
+      },
+    });
 
+    res.send({ id: session.id });
+  } catch (err) {
+    console.error("Stripe error:", err);
+    res.status(500).send({ error: "Payment failed" });
+  }
+});
 
+app.post("/create-payment-intent", async (req, res) => {
+  const { amount, email } = req.body;
+
+  try {
+    // Optional: Look for an existing payment intent for this email and amount
+    // You may store and reuse it using your DB if needed
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount * 100, // Stripe expects smallest unit (paisa)
+      currency: "bdt",
+      metadata: { email },
+    });
+
+    res.send({ clientSecret: paymentIntent.client_secret });
+  } catch (error) {
+    console.error("Payment Intent Error:", error);
+    res.status(500).send({ error: "Failed to create payment intent" });
+  }
+});
+
+// payment history 
 
 
 
