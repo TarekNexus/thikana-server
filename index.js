@@ -237,7 +237,7 @@ async function run() {
       }
     });
 
-    app.get("/announcements", async (req, res) => {
+    app.get("/announcements",verifyfirebaseToken, async (req, res) => {
       try {
         const announcements = await announcementsCollection
           .find({})
@@ -522,7 +522,7 @@ async function run() {
 
     // admin
 
-    app.get("/admin/profile", async (req, res) => {
+    app.get("/admin/profile",verifyfirebaseToken, async (req, res) => {
       try {
         const agreements = await agreementsCollection.find().toArray();
 
