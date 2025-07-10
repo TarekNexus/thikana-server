@@ -521,7 +521,55 @@ async function run() {
     });
 
     // admin
+ app.get("/admin/profile",verifyfirebaseToken, async (req, res) => {
+      try {
+        const agreements = await agreementsCollection.find().toArray();
 
+        const admin = agreements.find((a) => a.userRoll === "admin");
+
+        if (!admin) {
+          return res.status(404).json({ message: "Admin not found" });
+        }
+
+        const totalRooms = await apartmentsCollection.countDocuments();
+
+        const unavailableRoomsCount = agreements.length;
+        const availableRoomsCount = totalRooms - unavailableRoomsCount;
+
+        const availableRoomsPercent = totalRooms
+          ? ((availableRoomsCount / totalRooms) * 100).toFixed(1)
+          : "0";
+
+        const unavailableRoomsPercent = totalRooms
+          ? ((unavailableRoomsCount / totalRooms) * 100).toFixed(1)
+          : "0";
+
+        const totalUsers = agreements.filter(
+          (a) => a.userRoll === "user"
+        ).length;
+        const totalMembers = agreements.filter(
+          (a) => a.userRoll === "member"
+        ).length;
+
+        res.status(200).json({
+          admin: {
+            name: admin.userName,
+            email: admin.userEmail,
+            image: admin.userImage,
+          },
+          stats: {
+            totalRooms,
+            availableRoomsPercent,
+            unavailableRoomsPercent,
+            totalUsers,
+            totalMembers,
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching admin profile:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
    
 
     
