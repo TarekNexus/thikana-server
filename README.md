@@ -139,7 +139,7 @@ Bangladesh 🇧🇩
 |---------------------------|-------------------------------------------------------|
 | 🌍 Frontend Live Site     | https://thikana-client.netlify.app/                  |
 | ⚙️ Backend Live API       | https://thikana-server.vercel.app/                   |
-| 🧑‍💻 Client GitHub Repo    | https://github.com/tarekdevx/thikana-client          |
-| 🧑‍💻 Server GitHub Repo    | https://github.com/tarekdevx/thikana-server          |
+| 🧑‍💻 Client GitHub Repo    | https://github.com/Programming-Hero-Web-Course4/b11a12-client-side-TarekNexus        |
+| 🧑‍💻 Server GitHub Repo    | https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-TarekNexus         |
 
 ---
