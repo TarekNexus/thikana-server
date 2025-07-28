@@ -29,7 +29,7 @@ https://thikana-server.vercel.app
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-TarekNexus
+git clone https://github.com/TarekNexus/thikana-server
 cd thikana-server
 ```
 
@@ -139,7 +139,7 @@ Bangladesh 🇧🇩
 |---------------------------|-------------------------------------------------------|
 | 🌍 Frontend Live Site     | https://thikana.netlify.app/                 |
 | ⚙️ Backend Live API       | https://thikana-server.vercel.app/                   |
-| 🧑‍💻 Client GitHub Repo    | https://github.com/Programming-Hero-Web-Course4/b11a12-client-side-TarekNexus        |
-| 🧑‍💻 Server GitHub Repo    | https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-TarekNexus         |
+| 🧑‍💻 Client GitHub Repo    | https://github.com/TarekNexus/thikana-client        |
+| 🧑‍💻 Server GitHub Repo    | https://github.com/TarekNexus/thikana-server        |
 
 ---
